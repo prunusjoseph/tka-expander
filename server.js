@@ -9,78 +9,77 @@ app.use(express.json());
 // Whitelist de IDs permitidos
 const whitelist = [3926198989, 1542363203, 8723750727];
 
+// Ruta del archivo de registro
+const logFilePath = path.join(__dirname, "access_log.txt");
 // Ruta del archivo de script
 const scriptPath = path.join(__dirname, "hitbox_script.lua");
 
-// Middleware para habilitar CORS
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-    next();
-});
+// Función para leer el script
+function readScriptFile() {
+  try {
+    return fs.readFileSync(scriptPath, "utf8");
+  } catch (err) {
+    console.error("Error al leer el archivo de script:", err);
+    return null;
+  }
+}
 
-// Ruta de autenticación
+// Función para registrar acceso
+function logAccess(userId, isAllowed) {
+  const timestamp = new Date().toISOString();
+  const logEntry = `[${timestamp}] User ID: ${userId} - Acceso ${
+    isAllowed ? "PERMITIDO" : "DENEGADO"
+  }\n`;
+
+  // Usamos writeFileSync con la bandera 'a' para append
+  try {
+    fs.writeFileSync(logFilePath, logEntry, { flag: 'a' });
+  } catch (err) {
+    console.error("Error al escribir en el archivo de registro:", err);
+  }
+}
+
 app.post("/api/auth", (req, res) => {
-    try {
-        const { userId } = req.body;
-        
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                message: "Se requiere el ID de usuario"
-            });
-        }
+  const { userId } = req.body;
+  const userIdNumber = Number(userId);
+  const isAllowed = whitelist.includes(userIdNumber);
 
-        const userIdNumber = Number(userId);
-        const isAllowed = whitelist.includes(userIdNumber);
+  // Registrar el intento de acceso
+  logAccess(userId, isAllowed);
 
-        // Leer el script del archivo
-        let scriptContent;
-        try {
-            scriptContent = fs.readFileSync(scriptPath, "utf8");
-        } catch (err) {
-            console.error("Error al leer el archivo de script:", err);
-            return res.status(500).json({
-                success: false,
-                message: "Error interno del servidor al leer el script"
-            });
-        }
-
-        if (isAllowed) {
-            // Usuario autorizado
-            res.json({
-                success: true,
-                message: "Acceso concedido",
-                script: scriptContent
-            });
-        } else {
-            // Usuario no autorizado
-            res.status(403).json({
-                success: false,
-                message: "Acceso denegado. No estás autorizado para usar este script."
-            });
-        }
-    } catch (error) {
-        console.error("Error en /api/auth:", error);
-        res.status(500).json({
-            success: false,
-            message: "Error interno del servidor"
-        });
+  if (isAllowed) {
+    // Leer el script del archivo
+    const scriptContent = readScriptFile();
+    if (!scriptContent) {
+      return res.status(500).json({
+        success: false,
+        message: "falloo",
+      });
     }
-});
 
-// Ruta raíz
-app.get("/", (req, res) => {
+    // Si el usuario está en la whitelist, envía el script
     res.json({
-        status: "Servidor funcionando",
-        timestamp: new Date().toISOString()
+      success: true,
+      script: scriptContent,
     });
+  } else {
+    // Si NO está en la whitelist, responde con un mensaje de denegado
+    res.json({
+      success: false,
+      script:
+        'game:GetService("Players").LocalPlayer:Kick("Acceso denegado, no estás autorizado para usar este script.")',
+    });
+  }
 });
 
-// Iniciar el servidor
+app.get("/", (req, res) => {
+  res.send("Servidor funcionando");
+});
+
 app.listen(port, () => {
-    console.log(`Servidor corriendo en http://localhost:${port}`);
-    console.log("Endpoints disponibles:");
-    console.log(`- POST http://localhost:${port}/api/auth`);
-    console.log(`- GET  http://localhost:${port}/`);
+  // Crear el archivo de registro si no existe
+  if (!fs.existsSync(logFilePath)) {
+    fs.writeFileSync(logFilePath, "");
+  }
+  console.log(`Servidor corriendo en puerto ${port}`);
 });
