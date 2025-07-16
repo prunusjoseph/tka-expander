@@ -60,7 +60,7 @@ app.post("/api/auth", (req, res) => {
     // Si el usuario está en la whitelist, envía el script
     res.json({
       success: true,
-      script: scriptPath,
+      script: 'print("hola")'
     });
   } else {
     // Si NO está en la whitelist, responde con un mensaje de denegado
